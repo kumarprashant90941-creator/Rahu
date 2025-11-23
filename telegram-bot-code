@@ -1,0 +1,99 @@
+import telebot
+import threading
+import time
+
+# ---------------- CONFIG ----------------
+BOT_TOKEN_1 = "8242748197:AAFWyeTT3td30_wHuLWpBDG2vPZiEvpt9zc"
+BOT_TOKEN_2 = "8343949280:AAHggx8mtSC5YckpmEVOB_-N-CbkZ8fxI14"
+BOT_TOKEN_3 = "8214147862:AAFMbLvhl4oBStxvNjIv1GyWQ0h47Wm_g9U"  # <-- NEW BOT
+
+OWNER_ID = 6422388568
+
+WELCOME_MSG = """Hello, Nice to meet you! I am a receptionist!
+
+For verification, please provide:
+
+Payment Code:
+WhatsApp Number:
+"""
+# ----------------------------------------
+
+# Create bot objects
+bot1 = telebot.TeleBot(BOT_TOKEN_1)
+bot2 = telebot.TeleBot(BOT_TOKEN_2)
+bot3 = telebot.TeleBot(BOT_TOKEN_3)
+
+# Mapping for replies
+mapping1 = {}
+mapping2 = {}
+mapping3 = {}
+
+# ------------- COMMON BOT SETUP FUNCTION -------------
+def setup_bot(bot, mapping):
+
+    bot.remove_webhook()
+
+    @bot.message_handler(commands=['start'])
+    def welcome_start(message):
+        bot.send_message(message.chat.id, WELCOME_MSG)
+        try:
+            f = bot.forward_message(OWNER_ID, message.chat.id, message.message_id)
+            mapping[f.message_id] = message.chat.id
+        except Exception as e:
+            print("Forward error:", e)
+
+    @bot.message_handler(func=lambda m: m.from_user.id != OWNER_ID and m.chat.type == 'private')
+    def forward_to_owner(message):
+        try:
+            f = bot.forward_message(OWNER_ID, message.chat.id, message.message_id)
+            mapping[f.message_id] = message.chat.id
+        except Exception as e:
+            print("Forward error:", e)
+
+    @bot.message_handler(func=lambda m: m.from_user.id == OWNER_ID)
+    def owner_reply(message):
+        if message.reply_to_message:
+            msg_id = message.reply_to_message.message_id
+            if msg_id in mapping:
+                user_id = mapping[msg_id]
+                try:
+                    bot.send_message(user_id, message.text)
+                except Exception as e:
+                    bot.send_message(OWNER_ID, f"Reply failed: {e}")
+            else:
+                bot.send_message(OWNER_ID, "Mapping not found.")
+        else:
+            bot.send_message(OWNER_ID, "Reply to a forwarded message.")
+
+    @bot.message_handler(content_types=['new_chat_members'])
+    def welcome_new_member(message):
+        for new_member in message.new_chat_members:
+            bot.send_message(
+                message.chat.id,
+                f"Hello {new_member.first_name}: I am the receptionist, nice to meet you, Please provide the payment Code"
+            )
+
+
+# Setup all bots
+setup_bot(bot1, mapping1)
+setup_bot(bot2, mapping2)
+setup_bot(bot3, mapping3)
+
+# ------------- RUNNER FUNCTION FOR EACH BOT -------------
+def run_bot(bot, name):
+    while True:
+        try:
+            print(f"{name} Started...")
+            bot.infinity_polling()
+        except Exception as e:
+            print(f"{name} crashed:", e)
+            time.sleep(3)
+
+# Threads for bots
+t1 = threading.Thread(target=lambda: run_bot(bot1, "Bot1"))
+t2 = threading.Thread(target=lambda: run_bot(bot2, "Bot2"))
+t3 = threading.Thread(target=lambda: run_bot(bot3, "Bot3"))
+
+t1.start()
+t2.start()
+t3.start()
